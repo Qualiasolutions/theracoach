@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Message, UserProfile } from '@/lib/types';
+import { Message, UserProfile, SpeechRecognitionEvent, SpeechRecognitionErrorEvent, SpeechRecognition as SpeechRecognitionType } from '@/lib/types';
 
 // Speaker icon component
 const SpeakerIcon = ({ isMuted, size = 20 }: { isMuted?: boolean; size?: number }) => (
@@ -63,8 +63,7 @@ export default function TheraCoach() {
   const [ttsSupported, setTtsSupported] = useState(true);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const recognitionRef = useRef<any>(null);
+  const recognitionRef = useRef<SpeechRecognitionType | null>(null);
   const autoSendTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastTranscriptRef = useRef<string>('');
   const speechSynthRef = useRef<SpeechSynthesis | null>(null);
@@ -200,8 +199,7 @@ export default function TheraCoach() {
         recognition.interimResults = true;
         recognition.lang = 'en-US';
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        recognition.onresult = (event: any) => {
+        recognition.onresult = (event: SpeechRecognitionEvent) => {
           let finalTranscript = '';
           let interimTranscript = '';
 
@@ -254,8 +252,7 @@ export default function TheraCoach() {
           }
         };
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        recognition.onerror = (event: any) => {
+        recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
           setIsListening(false);
           if (event.error === 'not-allowed') {
             setMicError('Microphone access denied. Please allow microphone in browser settings.');
@@ -305,15 +302,18 @@ export default function TheraCoach() {
         recognitionRef.current.start();
         setIsListening(true);
       } catch (err: unknown) {
-        const error = err as Error;
-        if (error.name === 'NotFoundError') {
-          setMicError('No microphone found. Please connect a microphone and try again.');
-        } else if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-          setMicError('Microphone access denied. Click the lock icon in your browser address bar to allow microphone access.');
+        if (err instanceof Error) {
+          if (err.name === 'NotFoundError') {
+            setMicError('No microphone found. Please connect a microphone and try again.');
+          } else if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+            setMicError('Microphone access denied. Click the lock icon in your browser address bar to allow microphone access.');
+          } else {
+            setMicError(`Microphone error: ${err.message || 'Unknown error'}. Try refreshing the page.`);
+          }
+          console.error('Mic permission error:', err);
         } else {
-          setMicError(`Microphone error: ${error.message || 'Unknown error'}. Try refreshing the page.`);
+          setMicError('An unknown error occurred. Please try again.');
         }
-        console.error('Mic permission error:', err);
       }
     }
   };
@@ -516,28 +516,28 @@ export default function TheraCoach() {
   // Age selection modal
   if (showAgeModal) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4">
-        <div className="glass card-premium rounded-[32px] p-8 max-w-lg w-full">
-          <div className="text-center mb-8">
-            <div className="text-7xl mb-4 animate-float">🗣️</div>
-            <h1 className="text-4xl font-bold text-gradient mb-2">Thera Coach</h1>
-            <p className="text-navy-light text-lg">Your friendly speech practice buddy!</p>
+      <div className="min-h-screen flex items-center justify-center p-3 sm:p-4">
+        <div className="glass card-premium rounded-2xl sm:rounded-[32px] p-4 sm:p-6 md:p-8 max-w-lg w-full mx-2">
+          <div className="text-center mb-4 sm:mb-6 md:mb-8">
+            <div className="text-5xl sm:text-6xl md:text-7xl mb-2 sm:mb-4 animate-float">🗣️</div>
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gradient mb-1 sm:mb-2">Thera Coach</h1>
+            <p className="text-navy-light text-sm sm:text-base md:text-lg">Your friendly speech practice buddy!</p>
           </div>
 
-          <div className="space-y-6">
-            <p className="text-center text-navy font-semibold text-xl">Who&apos;s practicing today?</p>
+          <div className="space-y-4 sm:space-y-6">
+            <p className="text-center text-navy font-semibold text-base sm:text-lg md:text-xl">Who&apos;s practicing today?</p>
 
-            <div className="grid grid-cols-1 gap-4">
+            <div className="grid grid-cols-1 gap-3 sm:gap-4">
               {/* Toddler option - biggest and most colorful */}
               <button
                 onClick={() => handleAgeSubmit(4)}
-                className="group p-6 rounded-3xl bg-gradient-to-r from-coral to-coral-light text-white font-bold hover:from-coral-dark hover:to-coral transition-all transform hover:scale-[1.02] shadow-xl btn-premium"
+                className="group p-4 sm:p-5 md:p-6 rounded-2xl sm:rounded-3xl bg-gradient-to-r from-coral to-coral-light text-white font-bold hover:from-coral-dark hover:to-coral transition-all transform hover:scale-[1.02] active:scale-[0.98] shadow-xl btn-premium touch-target"
               >
-                <div className="flex items-center gap-4">
-                  <span className="text-5xl group-hover:animate-bounce-soft">👶</span>
+                <div className="flex items-center gap-3 sm:gap-4">
+                  <span className="text-4xl sm:text-5xl group-hover:animate-bounce-soft">👶</span>
                   <div className="text-left">
-                    <div className="text-2xl">Little Ones</div>
-                    <div className="text-sm opacity-90">Ages 2-5 • Play & Learn!</div>
+                    <div className="text-lg sm:text-xl md:text-2xl">Little Ones</div>
+                    <div className="text-xs sm:text-sm opacity-90">Ages 2-5 • Play & Learn!</div>
                   </div>
                 </div>
               </button>
@@ -545,13 +545,13 @@ export default function TheraCoach() {
               {/* Child option */}
               <button
                 onClick={() => handleAgeSubmit(7)}
-                className="group p-5 rounded-3xl bg-gradient-to-r from-teal to-teal-light text-white font-bold hover:from-teal-dark hover:to-teal transition-all transform hover:scale-[1.02] shadow-xl btn-premium"
+                className="group p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-gradient-to-r from-teal to-teal-light text-white font-bold hover:from-teal-dark hover:to-teal transition-all transform hover:scale-[1.02] active:scale-[0.98] shadow-xl btn-premium touch-target"
               >
-                <div className="flex items-center gap-4">
-                  <span className="text-4xl group-hover:animate-bounce-soft">🧒</span>
+                <div className="flex items-center gap-3 sm:gap-4">
+                  <span className="text-3xl sm:text-4xl group-hover:animate-bounce-soft">🧒</span>
                   <div className="text-left">
-                    <div className="text-xl">Kids</div>
-                    <div className="text-sm opacity-90">Ages 6-10 • Fun Practice!</div>
+                    <div className="text-base sm:text-lg md:text-xl">Kids</div>
+                    <div className="text-xs sm:text-sm opacity-90">Ages 6-10 • Fun Practice!</div>
                   </div>
                 </div>
               </button>
@@ -559,13 +559,13 @@ export default function TheraCoach() {
               {/* Teen option */}
               <button
                 onClick={() => handleAgeSubmit(14)}
-                className="group p-5 rounded-3xl bg-gradient-to-r from-lavender to-[#D6BCFA] text-white font-bold hover:from-[#9F7AEA] hover:to-lavender transition-all transform hover:scale-[1.02] shadow-xl btn-premium"
+                className="group p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-gradient-to-r from-lavender to-[#D6BCFA] text-white font-bold hover:from-[#9F7AEA] hover:to-lavender transition-all transform hover:scale-[1.02] active:scale-[0.98] shadow-xl btn-premium touch-target"
               >
-                <div className="flex items-center gap-4">
-                  <span className="text-4xl group-hover:animate-bounce-soft">🧑</span>
+                <div className="flex items-center gap-3 sm:gap-4">
+                  <span className="text-3xl sm:text-4xl group-hover:animate-bounce-soft">🧑</span>
                   <div className="text-left">
-                    <div className="text-xl">Teens</div>
-                    <div className="text-sm opacity-90">Ages 11-17 • Skill Building</div>
+                    <div className="text-base sm:text-lg md:text-xl">Teens</div>
+                    <div className="text-xs sm:text-sm opacity-90">Ages 11-17 • Skill Building</div>
                   </div>
                 </div>
               </button>
@@ -581,17 +581,17 @@ export default function TheraCoach() {
   return (
     <div className="min-h-screen flex flex-col">
       {/* Header */}
-      <header className="glass shadow-lg px-4 py-3 flex items-center justify-between sticky top-0 z-10">
-        <div className="flex items-center gap-3">
-          <span className={`text-4xl ${ageGroup === 'toddler' ? 'animate-float' : ''}`}>🗣️</span>
+      <header className="glass shadow-lg px-2 sm:px-4 py-2 sm:py-3 flex items-center justify-between sticky top-0 z-10 safe-area-inset-top">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <span className={`text-2xl sm:text-3xl md:text-4xl ${ageGroup === 'toddler' ? 'animate-float' : ''}`}>🗣️</span>
           <div>
-            <h1 className="text-xl font-bold text-gradient">Thera Coach</h1>
-            <p className="text-xs text-navy-light">
+            <h1 className="text-base sm:text-lg md:text-xl font-bold text-gradient">Thera Coach</h1>
+            <p className="text-[10px] sm:text-xs text-navy-light hidden xs:block">
               {ageGroup === 'toddler' ? 'Play & Learn!' : ageGroup === 'child' ? 'Speech Practice' : 'Speech Training'}
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2">
           {/* TTS Toggle */}
           {ttsSupported && (
             <motion.button
@@ -601,46 +601,46 @@ export default function TheraCoach() {
                 if (isSpeaking) stopSpeaking();
                 setTtsEnabled(!ttsEnabled);
               }}
-              className={`p-2 rounded-xl transition-all ${
+              className={`p-1.5 sm:p-2 rounded-lg sm:rounded-xl transition-all touch-target ${
                 ttsEnabled
                   ? 'bg-teal/20 text-teal-dark'
                   : 'bg-gray-100 text-gray-400'
               }`}
               title={ttsEnabled ? 'Voice enabled - click to mute' : 'Voice muted - click to enable'}
             >
-              <SpeakerIcon isMuted={!ttsEnabled} size={20} />
+              <SpeakerIcon isMuted={!ttsEnabled} size={18} />
             </motion.button>
           )}
-          <div className={`px-4 py-2 rounded-2xl ${ageGroup === 'toddler' ? 'bg-gold/20' : 'bg-teal/10'}`}>
-            <div className="text-sm font-bold text-coral">✨ {userProfile.xp} XP</div>
+          <div className={`px-2 sm:px-3 md:px-4 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl ${ageGroup === 'toddler' ? 'bg-gold/20' : 'bg-teal/10'}`}>
+            <div className="text-xs sm:text-sm font-bold text-coral">✨ {userProfile.xp}</div>
           </div>
           {userProfile.streak > 0 && (
-            <div className="px-3 py-2 rounded-2xl bg-coral/10">
-              <div className="text-xs font-bold text-coral">🔥 {userProfile.streak}</div>
+            <div className="px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl bg-coral/10">
+              <div className="text-[10px] sm:text-xs font-bold text-coral">🔥 {userProfile.streak}</div>
             </div>
           )}
         </div>
       </header>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto p-2 sm:p-4 space-y-3 sm:space-y-4">
         {messages.map((message) => (
           <div
             key={message.id}
             className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
           >
             <div
-              className={`max-w-[90%] md:max-w-[75%] rounded-3xl px-5 py-4 ${
+              className={`max-w-[95%] sm:max-w-[90%] md:max-w-[75%] rounded-2xl sm:rounded-3xl px-3 sm:px-5 py-3 sm:py-4 ${
                 message.role === 'user'
                   ? 'bg-gradient-to-r from-teal to-teal-light text-white rounded-br-lg'
                   : 'glass card-premium text-navy rounded-bl-lg'
               }`}
             >
               {message.role === 'assistant' && (
-                <div className="flex items-center justify-between gap-2 mb-3 pb-2 border-b border-coral/20">
-                  <div className="flex items-center gap-2">
-                    <span className={`text-2xl ${ageGroup === 'toddler' ? 'animate-bounce-soft' : ''}`}>🗣️</span>
-                    <span className="font-bold text-sm text-gradient">Thera Coach</span>
+                <div className="flex items-center justify-between gap-2 mb-2 sm:mb-3 pb-2 border-b border-coral/20">
+                  <div className="flex items-center gap-1.5 sm:gap-2">
+                    <span className={`text-xl sm:text-2xl ${ageGroup === 'toddler' ? 'animate-bounce-soft' : ''}`}>🗣️</span>
+                    <span className="font-bold text-xs sm:text-sm text-gradient">Thera Coach</span>
                   </div>
                   {/* Speaker button for this message */}
                   {ttsSupported && message.content && (
@@ -673,7 +673,7 @@ export default function TheraCoach() {
                 </div>
               )}
               <div className={`whitespace-pre-wrap leading-relaxed ${
-                ageGroup === 'toddler' ? 'text-lg' : 'text-base'
+                ageGroup === 'toddler' ? 'text-base sm:text-lg' : 'text-sm sm:text-base'
               }`}>
                 {message.content}
               </div>
@@ -683,13 +683,13 @@ export default function TheraCoach() {
 
         {isLoading && messages.length > 0 && messages[messages.length - 1]?.role === 'user' && (
           <div className="flex justify-start">
-            <div className="glass card-premium rounded-3xl rounded-bl-lg px-5 py-4">
-              <div className="flex items-center gap-3">
-                <span className="text-2xl animate-bounce-soft">🗣️</span>
-                <div className="flex gap-1.5">
-                  <div className="w-3 h-3 bg-coral rounded-full animate-bounce-soft" />
-                  <div className="w-3 h-3 bg-teal rounded-full animate-bounce-soft" style={{ animationDelay: '150ms' }} />
-                  <div className="w-3 h-3 bg-gold rounded-full animate-bounce-soft" style={{ animationDelay: '300ms' }} />
+            <div className="glass card-premium rounded-2xl sm:rounded-3xl rounded-bl-lg px-3 sm:px-5 py-3 sm:py-4">
+              <div className="flex items-center gap-2 sm:gap-3">
+                <span className="text-xl sm:text-2xl animate-bounce-soft">🗣️</span>
+                <div className="flex gap-1 sm:gap-1.5">
+                  <div className="w-2 h-2 sm:w-3 sm:h-3 bg-coral rounded-full animate-bounce-soft" />
+                  <div className="w-2 h-2 sm:w-3 sm:h-3 bg-teal rounded-full animate-bounce-soft" style={{ animationDelay: '150ms' }} />
+                  <div className="w-2 h-2 sm:w-3 sm:h-3 bg-gold rounded-full animate-bounce-soft" style={{ animationDelay: '300ms' }} />
                 </div>
               </div>
             </div>
@@ -701,18 +701,18 @@ export default function TheraCoach() {
 
       {/* Toddler Activity Picker */}
       {ageGroup === 'toddler' && showActivityPicker && (
-        <div className="px-4 py-3 glass border-t border-white/30">
-          <p className="text-center text-navy font-bold mb-3 text-lg">Tap to play! 👇</p>
-          <div className="grid grid-cols-2 gap-3">
+        <div className="px-2 sm:px-4 py-2 sm:py-3 glass border-t border-white/30">
+          <p className="text-center text-navy font-bold mb-2 sm:mb-3 text-base sm:text-lg">Tap to play! 👇</p>
+          <div className="grid grid-cols-2 gap-2 sm:gap-3">
             {TODDLER_ACTIVITIES.map((activity) => (
               <button
                 key={activity.id}
                 onClick={() => handleActivitySelect(activity)}
                 disabled={isLoading}
-                className="p-4 rounded-2xl bg-gradient-to-br from-white to-cream-dark hover:from-coral-light hover:to-coral text-navy hover:text-white transition-all transform hover:scale-105 shadow-lg disabled:opacity-50 group"
+                className="p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-gradient-to-br from-white to-cream-dark hover:from-coral-light hover:to-coral text-navy hover:text-white transition-all transform hover:scale-105 active:scale-95 shadow-lg disabled:opacity-50 group touch-target"
               >
-                <span className="text-4xl block mb-2 group-hover:animate-bounce-soft">{activity.emoji}</span>
-                <span className="font-bold text-sm">{activity.label}</span>
+                <span className="text-3xl sm:text-4xl block mb-1 sm:mb-2 group-hover:animate-bounce-soft">{activity.emoji}</span>
+                <span className="font-bold text-xs sm:text-sm">{activity.label}</span>
               </button>
             ))}
           </div>
@@ -721,7 +721,7 @@ export default function TheraCoach() {
 
       {/* Child Quick Actions */}
       {ageGroup === 'child' && !showActivityPicker && (
-        <div className="px-4 py-2 flex gap-2 overflow-x-auto">
+        <div className="px-2 sm:px-4 py-2 flex gap-2 overflow-x-auto hide-scrollbar">
           {CHILD_ACTIVITIES.map((activity) => (
             <button
               key={activity.id}
@@ -730,7 +730,7 @@ export default function TheraCoach() {
                 setTimeout(() => handleSend(), 100);
               }}
               disabled={isLoading}
-              className="px-4 py-2 glass rounded-full text-sm font-semibold text-navy hover:bg-teal hover:text-white transition-all disabled:opacity-50 whitespace-nowrap flex items-center gap-2"
+              className="px-3 sm:px-4 py-2 glass rounded-full text-xs sm:text-sm font-semibold text-navy hover:bg-teal hover:text-white transition-all disabled:opacity-50 whitespace-nowrap flex items-center gap-1.5 sm:gap-2 touch-target"
             >
               <span>{activity.emoji}</span>
               {activity.label}
@@ -741,7 +741,7 @@ export default function TheraCoach() {
 
       {/* Teen Quick Actions */}
       {ageGroup === 'teen' && !showActivityPicker && (
-        <div className="px-4 py-2 flex gap-2 overflow-x-auto">
+        <div className="px-2 sm:px-4 py-2 flex gap-2 overflow-x-auto hide-scrollbar">
           {TEEN_ACTIVITIES.map((activity) => (
             <button
               key={activity.id}
@@ -750,7 +750,7 @@ export default function TheraCoach() {
                 setTimeout(() => handleSend(), 100);
               }}
               disabled={isLoading}
-              className="px-4 py-2 glass rounded-full text-sm font-medium text-navy hover:bg-lavender hover:text-white transition-all disabled:opacity-50 whitespace-nowrap flex items-center gap-2"
+              className="px-3 sm:px-4 py-2 glass rounded-full text-xs sm:text-sm font-medium text-navy hover:bg-lavender hover:text-white transition-all disabled:opacity-50 whitespace-nowrap flex items-center gap-1.5 sm:gap-2 touch-target"
             >
               <span>{activity.emoji}</span>
               {activity.label}
@@ -760,15 +760,15 @@ export default function TheraCoach() {
       )}
 
       {/* Input Area */}
-      <div className="glass p-4 shadow-lg border-t border-white/30">
-        <div className="max-w-4xl mx-auto space-y-3">
+      <div className="glass p-2 sm:p-4 shadow-lg border-t border-white/30 safe-area-inset-bottom">
+        <div className="max-w-4xl mx-auto space-y-2 sm:space-y-3">
           {/* Main input */}
-          <div className="flex gap-3">
+          <div className="flex gap-2 sm:gap-3">
             {/* Mic button */}
             <button
               onClick={toggleListening}
               disabled={isLoading}
-              className={`p-4 rounded-full transition-all transform hover:scale-110 shadow-xl btn-premium ${
+              className={`p-3 sm:p-4 rounded-full transition-all transform hover:scale-110 active:scale-95 shadow-xl btn-premium touch-target ${
                 isListening
                   ? 'bg-coral text-white animate-pulse-glow'
                   : 'bg-gradient-to-r from-coral to-coral-light text-white hover:from-coral-dark hover:to-coral'
@@ -776,11 +776,11 @@ export default function TheraCoach() {
               title={isListening ? 'Stop listening' : 'Start speaking'}
             >
               {isListening ? (
-                <svg className="w-7 h-7" fill="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5 sm:w-6 sm:h-6 md:w-7 md:h-7" fill="currentColor" viewBox="0 0 24 24">
                   <rect x="6" y="6" width="12" height="12" rx="2" />
                 </svg>
               ) : (
-                <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5 sm:w-6 sm:h-6 md:w-7 md:h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
                 </svg>
               )}
@@ -794,13 +794,13 @@ export default function TheraCoach() {
               onKeyDown={handleKeyDown}
               placeholder={
                 isListening
-                  ? "🎤 Listening... speak now!"
+                  ? "🎤 Listening..."
                   : ageGroup === 'toddler'
-                    ? "Type or tap the big red mic! 🎤"
-                    : "Type or tap the mic to speak..."
+                    ? "Type or tap mic! 🎤"
+                    : "Type or tap the mic..."
               }
               disabled={isLoading}
-              className={`flex-1 px-5 py-4 rounded-full border-2 focus:outline-none focus-ring text-navy text-lg ${
+              className={`flex-1 min-w-0 px-3 sm:px-5 py-3 sm:py-4 rounded-full border-2 focus:outline-none focus-ring text-navy text-base sm:text-lg ${
                 isListening
                   ? 'border-coral bg-coral/5'
                   : 'border-teal/30 bg-white/80 hover:border-teal/50'
@@ -812,15 +812,15 @@ export default function TheraCoach() {
               onClick={handleSend}
               disabled={isLoading || !input.trim()}
               data-send-button
-              className="p-4 bg-gradient-to-r from-teal to-teal-light text-white rounded-full font-bold hover:from-teal-dark hover:to-teal disabled:opacity-50 disabled:cursor-not-allowed transition-all transform hover:scale-110 shadow-xl btn-premium"
+              className="p-3 sm:p-4 bg-gradient-to-r from-teal to-teal-light text-white rounded-full font-bold hover:from-teal-dark hover:to-teal disabled:opacity-50 disabled:cursor-not-allowed transition-all transform hover:scale-110 active:scale-95 shadow-xl btn-premium touch-target"
             >
               {isLoading ? (
-                <svg className="w-7 h-7 animate-spin" fill="none" viewBox="0 0 24 24">
+                <svg className="w-5 h-5 sm:w-6 sm:h-6 md:w-7 md:h-7 animate-spin" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                 </svg>
               ) : (
-                <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5 sm:w-6 sm:h-6 md:w-7 md:h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                 </svg>
               )}
@@ -829,7 +829,7 @@ export default function TheraCoach() {
 
           {/* Quick responses based on age */}
           {!isListening && ageGroup === 'toddler' && (
-            <div className="flex gap-2 justify-center flex-wrap">
+            <div className="flex gap-1.5 sm:gap-2 justify-center flex-wrap">
               {['👍 Yes!', '👎 No', '🔄 Again!', '🎉 Yay!'].map((choice) => (
                 <button
                   key={choice}
@@ -838,7 +838,7 @@ export default function TheraCoach() {
                     setTimeout(() => handleSend(), 100);
                   }}
                   disabled={isLoading}
-                  className="px-5 py-3 bg-white rounded-full text-lg font-bold text-navy hover:bg-gold hover:text-navy shadow-md transition-all transform hover:scale-105 disabled:opacity-50"
+                  className="px-3 sm:px-5 py-2 sm:py-3 bg-white rounded-full text-sm sm:text-lg font-bold text-navy hover:bg-gold hover:text-navy shadow-md transition-all transform hover:scale-105 active:scale-95 disabled:opacity-50 touch-target"
                 >
                   {choice}
                 </button>
@@ -847,8 +847,8 @@ export default function TheraCoach() {
           )}
 
           {!isListening && ageGroup !== 'toddler' && (
-            <div className="flex gap-2 overflow-x-auto pb-1">
-              <span className="text-xs text-navy-light self-center">Quick:</span>
+            <div className="flex gap-1.5 sm:gap-2 overflow-x-auto pb-1 hide-scrollbar">
+              <span className="text-xs text-navy-light self-center shrink-0">Quick:</span>
               {['A', 'B', 'C'].map((choice) => (
                 <button
                   key={choice}
@@ -857,7 +857,7 @@ export default function TheraCoach() {
                     setTimeout(() => handleSend(), 100);
                   }}
                   disabled={isLoading}
-                  className="px-4 py-2 bg-white/80 rounded-full text-sm font-semibold text-navy hover:bg-teal hover:text-white transition-colors disabled:opacity-50"
+                  className="px-3 sm:px-4 py-1.5 sm:py-2 bg-white/80 rounded-full text-xs sm:text-sm font-semibold text-navy hover:bg-teal hover:text-white transition-colors active:scale-95 disabled:opacity-50 touch-target"
                 >
                   {choice}
                 </button>
@@ -868,7 +868,7 @@ export default function TheraCoach() {
                   setTimeout(() => handleSend(), 100);
                 }}
                 disabled={isLoading}
-                className="px-4 py-2 bg-white/80 rounded-full text-sm font-semibold text-navy hover:bg-mint hover:text-navy transition-colors disabled:opacity-50 whitespace-nowrap"
+                className="px-3 sm:px-4 py-1.5 sm:py-2 bg-white/80 rounded-full text-xs sm:text-sm font-semibold text-navy hover:bg-mint hover:text-navy transition-colors active:scale-95 disabled:opacity-50 whitespace-nowrap touch-target"
               >
                 🔄 Again
               </button>
@@ -878,7 +878,7 @@ export default function TheraCoach() {
                   setTimeout(() => handleSend(), 100);
                 }}
                 disabled={isLoading}
-                className="px-4 py-2 bg-white/80 rounded-full text-sm font-semibold text-navy hover:bg-lavender hover:text-white transition-colors disabled:opacity-50 whitespace-nowrap"
+                className="px-3 sm:px-4 py-1.5 sm:py-2 bg-white/80 rounded-full text-xs sm:text-sm font-semibold text-navy hover:bg-lavender hover:text-white transition-colors active:scale-95 disabled:opacity-50 whitespace-nowrap touch-target"
               >
                 🔀 Different
               </button>
@@ -892,22 +892,22 @@ export default function TheraCoach() {
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
-                className="flex flex-col items-center gap-2"
+                className="flex flex-col items-center gap-1.5 sm:gap-2"
               >
-                <div className="flex items-center justify-center gap-3 text-coral text-lg font-bold">
-                  <div className="flex gap-1 items-end h-6">
+                <div className="flex items-center justify-center gap-2 sm:gap-3 text-coral text-base sm:text-lg font-bold">
+                  <div className="flex gap-0.5 sm:gap-1 items-end h-5 sm:h-6">
                     {[...Array(5)].map((_, i) => (
                       <motion.div
                         key={i}
-                        className="w-1.5 bg-coral rounded-full"
-                        animate={{ height: ['12px', '24px', '12px'] }}
+                        className="w-1 sm:w-1.5 bg-coral rounded-full"
+                        animate={{ height: ['10px', '20px', '10px'] }}
                         transition={{ duration: 0.5, repeat: Infinity, delay: i * 0.1 }}
                       />
                     ))}
                   </div>
                   <span>{ageGroup === 'toddler' ? "I'm listening! 👂" : "Listening..."}</span>
                 </div>
-                <span className="text-xs text-navy-light">
+                <span className="text-xs text-navy-light text-center px-2">
                   {ageGroup === 'toddler' ? "I'll send when you stop talking! ✨" : "Auto-sends after you pause speaking"}
                 </span>
               </motion.div>
@@ -921,13 +921,13 @@ export default function TheraCoach() {
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
-                className="flex items-center justify-center gap-3 text-teal text-sm font-medium"
+                className="flex items-center justify-center gap-2 sm:gap-3 text-teal text-xs sm:text-sm font-medium"
               >
-                <div className="flex gap-1 items-center">
+                <div className="flex gap-0.5 sm:gap-1 items-center">
                   {[1, 2, 3].map((i) => (
                     <motion.div
                       key={i}
-                      className="w-2 h-2 bg-teal rounded-full"
+                      className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-teal rounded-full"
                       animate={{ scale: [1, 1.5, 1] }}
                       transition={{ duration: 0.6, repeat: Infinity, delay: i * 0.15 }}
                     />
@@ -938,7 +938,7 @@ export default function TheraCoach() {
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.95 }}
                   onClick={stopSpeaking}
-                  className="px-3 py-1 bg-teal/10 rounded-full text-xs hover:bg-teal/20 font-semibold"
+                  className="px-2 sm:px-3 py-1 bg-teal/10 rounded-full text-xs hover:bg-teal/20 font-semibold touch-target"
                 >
                   Stop
                 </motion.button>
@@ -948,15 +948,15 @@ export default function TheraCoach() {
 
           {/* Error message */}
           {micError && (
-            <div className="flex items-center justify-center gap-2 text-coral text-sm bg-coral/10 rounded-2xl p-3">
+            <div className="flex items-center justify-center gap-1.5 sm:gap-2 text-coral text-xs sm:text-sm bg-coral/10 rounded-xl sm:rounded-2xl p-2 sm:p-3">
               <span>⚠️</span>
-              <span>{micError}</span>
-              <button onClick={() => setMicError(null)} className="ml-2 font-bold">✕</button>
+              <span className="text-center">{micError}</span>
+              <button onClick={() => setMicError(null)} className="ml-1 sm:ml-2 font-bold touch-target p-1">✕</button>
             </div>
           )}
 
           {!micSupported && (
-            <div className="text-center text-xs text-navy-light">
+            <div className="text-center text-xs text-navy-light px-2">
               🎤 Voice input requires Chrome or Edge browser
             </div>
           )}
@@ -964,13 +964,4 @@ export default function TheraCoach() {
       </div>
     </div>
   );
-}
-
-declare global {
-  interface Window {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    SpeechRecognition: any;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    webkitSpeechRecognition: any;
-  }
 }

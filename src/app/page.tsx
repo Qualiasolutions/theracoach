@@ -1,5 +1,10 @@
 import TheraCoach from '@/components/TheraCoach';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 export default function Home() {
-  return <TheraCoach />;
+  return (
+    <ErrorBoundary>
+      <TheraCoach />
+    </ErrorBoundary>
+  );
 }
