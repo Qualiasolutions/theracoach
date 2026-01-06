@@ -40,7 +40,8 @@ export default function TheraCoach() {
   const [micError, setMicError] = useState<string | null>(null);
   const [showActivityPicker, setShowActivityPicker] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recognitionRef = useRef<any>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -68,7 +69,8 @@ export default function TheraCoach() {
         recognition.interimResults = true;
         recognition.lang = 'en-US';
 
-        recognition.onresult = (event) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        recognition.onresult = (event: any) => {
           let finalTranscript = '';
           let interimTranscript = '';
 
@@ -94,7 +96,8 @@ export default function TheraCoach() {
           setIsListening(false);
         };
 
-        recognition.onerror = (event) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        recognition.onerror = (event: any) => {
           setIsListening(false);
           if (event.error === 'not-allowed') {
             setMicError('Microphone access denied. Please allow microphone in browser settings.');
@@ -687,7 +690,9 @@ export default function TheraCoach() {
 
 declare global {
   interface Window {
-    SpeechRecognition: typeof SpeechRecognition;
-    webkitSpeechRecognition: typeof SpeechRecognition;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    SpeechRecognition: any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    webkitSpeechRecognition: any;
   }
 }
