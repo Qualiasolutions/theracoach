@@ -42,6 +42,8 @@ export default function TheraCoach() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
+  const autoSendTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastTranscriptRef = useRef<string>('');
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -83,17 +85,44 @@ export default function TheraCoach() {
             }
           }
 
+          const newTranscript = finalTranscript || interimTranscript;
+
           setInput(prev => {
             if (finalTranscript) {
-              return (prev + ' ' + finalTranscript).trim();
+              const updated = (prev + ' ' + finalTranscript).trim();
+              lastTranscriptRef.current = updated;
+              return updated;
             }
             return (prev.split(' ').slice(0, -1).join(' ') + ' ' + interimTranscript).trim() || interimTranscript;
           });
           setMicError(null);
+
+          // Auto-send after 2 seconds of silence when we have final transcript
+          if (finalTranscript && newTranscript.trim()) {
+            if (autoSendTimeoutRef.current) {
+              clearTimeout(autoSendTimeoutRef.current);
+            }
+            autoSendTimeoutRef.current = setTimeout(() => {
+              if (lastTranscriptRef.current.trim() && recognitionRef.current) {
+                recognitionRef.current.stop();
+                // Trigger send after a short delay to ensure state is updated
+                setTimeout(() => {
+                  const sendButton = document.querySelector('[data-send-button]') as HTMLButtonElement;
+                  if (sendButton && !sendButton.disabled) {
+                    sendButton.click();
+                  }
+                }, 100);
+              }
+            }, 2000); // 2 second pause triggers auto-send
+          }
         };
 
         recognition.onend = () => {
           setIsListening(false);
+          // Clear auto-send timeout when recognition ends
+          if (autoSendTimeoutRef.current) {
+            clearTimeout(autoSendTimeoutRef.current);
+          }
         };
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -576,6 +605,7 @@ export default function TheraCoach() {
             <button
               onClick={handleSend}
               disabled={isLoading || !input.trim()}
+              data-send-button
               className="p-4 bg-gradient-to-r from-teal to-teal-light text-white rounded-full font-bold hover:from-teal-dark hover:to-teal disabled:opacity-50 disabled:cursor-not-allowed transition-all transform hover:scale-110 shadow-xl btn-premium"
             >
               {isLoading ? (
@@ -651,20 +681,25 @@ export default function TheraCoach() {
 
           {/* Listening indicator */}
           {isListening && (
-            <div className="flex items-center justify-center gap-3 text-coral text-lg font-bold">
-              <div className="flex gap-1 items-end">
-                {[...Array(5)].map((_, i) => (
-                  <div
-                    key={i}
-                    className="w-2 bg-coral rounded-full"
-                    style={{
-                      height: `${12 + Math.random() * 16}px`,
-                      animation: `wave 0.5s ease-in-out ${i * 0.1}s infinite`,
-                    }}
-                  />
-                ))}
+            <div className="flex flex-col items-center gap-2">
+              <div className="flex items-center justify-center gap-3 text-coral text-lg font-bold">
+                <div className="flex gap-1 items-end">
+                  {[...Array(5)].map((_, i) => (
+                    <div
+                      key={i}
+                      className="w-2 bg-coral rounded-full"
+                      style={{
+                        height: `${12 + Math.random() * 16}px`,
+                        animation: `wave 0.5s ease-in-out ${i * 0.1}s infinite`,
+                      }}
+                    />
+                  ))}
+                </div>
+                <span>{ageGroup === 'toddler' ? "I'm listening! 👂" : "Listening..."}</span>
               </div>
-              <span>{ageGroup === 'toddler' ? "I'm listening! 👂" : "Listening... tap mic to stop"}</span>
+              <span className="text-xs text-navy-light">
+                {ageGroup === 'toddler' ? "I'll send when you stop talking! ✨" : "Auto-sends after you pause speaking"}
+              </span>
             </div>
           )}
 
