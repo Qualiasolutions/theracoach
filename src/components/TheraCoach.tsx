@@ -1,7 +1,23 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Message, UserProfile } from '@/lib/types';
+
+// Speaker icon component
+const SpeakerIcon = ({ isMuted, size = 20 }: { isMuted?: boolean; size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+    <path d="M11 5L6 9H2v6h4l5 4V5z" strokeLinecap="round" strokeLinejoin="round" />
+    {isMuted ? (
+      <path d="M23 9l-6 6M17 9l6 6" strokeLinecap="round" strokeLinejoin="round" />
+    ) : (
+      <>
+        <path d="M15.54 8.46a5 5 0 010 7.07" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M19.07 4.93a10 10 0 010 14.14" strokeLinecap="round" strokeLinejoin="round" />
+      </>
+    )}
+  </svg>
+);
 
 // Fun practice options for toddlers with pictures
 const TODDLER_ACTIVITIES = [
@@ -39,11 +55,19 @@ export default function TheraCoach() {
   const [micSupported, setMicSupported] = useState(true);
   const [micError, setMicError] = useState<string | null>(null);
   const [showActivityPicker, setShowActivityPicker] = useState(false);
+
+  // TTS state
+  const [ttsEnabled, setTtsEnabled] = useState(true);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [currentSpeakingId, setCurrentSpeakingId] = useState<string | null>(null);
+  const [ttsSupported, setTtsSupported] = useState(true);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
   const autoSendTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastTranscriptRef = useRef<string>('');
+  const speechSynthRef = useRef<SpeechSynthesis | null>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -54,12 +78,117 @@ export default function TheraCoach() {
   }, [messages]);
 
   // Get age group
-  const getAgeGroup = () => {
+  const getAgeGroup = useCallback(() => {
     if (!userProfile.age) return 'child';
     if (userProfile.age <= 5) return 'toddler';
     if (userProfile.age <= 10) return 'child';
     return 'teen';
-  };
+  }, [userProfile.age]);
+
+  // Initialize TTS
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      speechSynthRef.current = window.speechSynthesis;
+      setTtsSupported(true);
+
+      // Load voices
+      const loadVoices = () => {
+        window.speechSynthesis.getVoices();
+      };
+      loadVoices();
+      window.speechSynthesis.onvoiceschanged = loadVoices;
+    } else {
+      setTtsSupported(false);
+    }
+
+    return () => {
+      if (speechSynthRef.current) {
+        speechSynthRef.current.cancel();
+      }
+    };
+  }, []);
+
+  // Speak text function
+  const speakText = useCallback((text: string, messageId?: string) => {
+    if (!speechSynthRef.current || !ttsSupported || !ttsEnabled) return;
+
+    // Cancel any ongoing speech
+    speechSynthRef.current.cancel();
+
+    // Clean text for speech (remove emojis, markdown, etc.)
+    const cleanText = text
+      .replace(/[\u{1F300}-\u{1F9FF}]/gu, '') // Remove emojis
+      .replace(/\*\*/g, '')
+      .replace(/\n+/g, '. ')
+      .replace(/\(([A-C])\)/g, 'Option $1:')
+      .trim();
+
+    if (!cleanText) return;
+
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+
+    // Get voices and select appropriate one
+    const voices = speechSynthRef.current.getVoices();
+    const preferredVoices = voices.filter(v =>
+      v.lang.startsWith('en-US') &&
+      (v.name.includes('Samantha') ||
+       v.name.includes('Google') ||
+       v.name.includes('Microsoft') ||
+       v.name.toLowerCase().includes('female'))
+    );
+
+    if (preferredVoices.length > 0) {
+      utterance.voice = preferredVoices[0];
+    } else {
+      const usVoice = voices.find(v => v.lang.startsWith('en-US'));
+      if (usVoice) utterance.voice = usVoice;
+    }
+
+    // Adjust rate and pitch based on age group
+    const ageGroup = getAgeGroup();
+    switch (ageGroup) {
+      case 'toddler':
+        utterance.rate = 0.75; // Slower for little ones
+        utterance.pitch = 1.2; // Slightly higher pitch
+        break;
+      case 'child':
+        utterance.rate = 0.85;
+        utterance.pitch = 1.1;
+        break;
+      case 'teen':
+        utterance.rate = 0.95;
+        utterance.pitch = 1.0;
+        break;
+    }
+
+    utterance.volume = 1;
+
+    utterance.onstart = () => {
+      setIsSpeaking(true);
+      if (messageId) setCurrentSpeakingId(messageId);
+    };
+
+    utterance.onend = () => {
+      setIsSpeaking(false);
+      setCurrentSpeakingId(null);
+    };
+
+    utterance.onerror = () => {
+      setIsSpeaking(false);
+      setCurrentSpeakingId(null);
+    };
+
+    speechSynthRef.current.speak(utterance);
+  }, [ttsEnabled, ttsSupported, getAgeGroup]);
+
+  // Stop speaking
+  const stopSpeaking = useCallback(() => {
+    if (speechSynthRef.current) {
+      speechSynthRef.current.cancel();
+      setIsSpeaking(false);
+      setCurrentSpeakingId(null);
+    }
+  }, []);
 
   // Initialize speech recognition
   useEffect(() => {
@@ -150,6 +279,11 @@ export default function TheraCoach() {
   }, []);
 
   const toggleListening = async () => {
+    // Stop TTS if speaking when user starts to talk
+    if (isSpeaking) {
+      stopSpeaking();
+    }
+
     if (!micSupported) {
       setMicError('Speech recognition not supported. Use Chrome or Edge browser.');
       return;
@@ -233,26 +367,35 @@ export default function TheraCoach() {
           content: assistantMessage,
         }]);
       }
+
+      // Auto-speak the response after streaming completes
+      if (ttsEnabled && assistantMessage) {
+        setTimeout(() => speakText(assistantMessage, assistantId), 500);
+      }
     } catch (error) {
       console.error('Error:', error);
       const ageGroup = age <= 5 ? 'toddler' : age <= 10 ? 'child' : 'teen';
       const fallbackMessages: Record<string, string> = {
-        toddler: "Hi little friend! 🌟\n\nLet's play with sounds!\n\nTap a picture to start! 👇",
-        child: "Hi there! I'm Thera Coach! 🗣️\n\nWhat would you like to practice today?\n\n(A) Sound practice\n(B) Story time\n(C) Word games",
-        teen: "Hey! I'm Thera Coach.\n\nWhat do you want to work on?\n\n(A) Articulation drills\n(B) Fluency practice\n(C) Social scenarios",
+        toddler: "Hi little friend! Let's play with sounds! Tap a picture to start!",
+        child: "Hi there! I'm Thera Coach! What would you like to practice today? Option A: Sound practice. Option B: Story time. Option C: Word games.",
+        teen: "Hey! I'm Thera Coach. What do you want to work on? Option A: Articulation drills. Option B: Fluency practice. Option C: Social scenarios.",
       };
+      const fallbackMessage = fallbackMessages[ageGroup];
       setMessages([{
         id: Date.now().toString(),
         role: 'assistant',
-        content: fallbackMessages[ageGroup],
+        content: fallbackMessage,
       }]);
+      if (ttsEnabled) {
+        setTimeout(() => speakText(fallbackMessage), 500);
+      }
     } finally {
       setIsLoading(false);
       if (age <= 5) {
         setShowActivityPicker(true);
       }
     }
-  }, []);
+  }, [speakText, ttsEnabled]);
 
   const handleAgeSubmit = (age: number) => {
     setUserProfile(prev => ({ ...prev, age }));
@@ -269,6 +412,11 @@ export default function TheraCoach() {
 
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
+
+    // Stop TTS if speaking
+    if (isSpeaking) {
+      stopSpeaking();
+    }
 
     if (isListening && recognitionRef.current) {
       recognitionRef.current.stop();
@@ -327,6 +475,11 @@ export default function TheraCoach() {
         ));
       }
 
+      // Auto-speak the response after streaming completes
+      if (ttsEnabled && assistantMessage) {
+        setTimeout(() => speakText(assistantMessage, assistantId), 300);
+      }
+
       // Check for XP awards
       if (assistantMessage.includes('+') && assistantMessage.includes('XP')) {
         const xpMatch = assistantMessage.match(/\+(\d+)\s*XP/i);
@@ -337,13 +490,17 @@ export default function TheraCoach() {
       }
     } catch (error) {
       console.error('Error:', error);
+      const errorMsg = getAgeGroup() === 'toddler'
+        ? "Oops! Let's try again!"
+        : "I'm sorry, I had trouble responding. Let's try again!";
       setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: getAgeGroup() === 'toddler'
-          ? "Oops! Let's try again! 🌟"
-          : "I'm sorry, I had trouble responding. Let's try again!",
+        content: errorMsg,
       }]);
+      if (ttsEnabled) {
+        speakText(errorMsg);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -434,9 +591,28 @@ export default function TheraCoach() {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          {/* TTS Toggle */}
+          {ttsSupported && (
+            <motion.button
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => {
+                if (isSpeaking) stopSpeaking();
+                setTtsEnabled(!ttsEnabled);
+              }}
+              className={`p-2 rounded-xl transition-all ${
+                ttsEnabled
+                  ? 'bg-teal/20 text-teal-dark'
+                  : 'bg-gray-100 text-gray-400'
+              }`}
+              title={ttsEnabled ? 'Voice enabled - click to mute' : 'Voice muted - click to enable'}
+            >
+              <SpeakerIcon isMuted={!ttsEnabled} size={20} />
+            </motion.button>
+          )}
           <div className={`px-4 py-2 rounded-2xl ${ageGroup === 'toddler' ? 'bg-gold/20' : 'bg-teal/10'}`}>
-            <div className="text-sm font-bold text-coral">⭐ {userProfile.xp} XP</div>
+            <div className="text-sm font-bold text-coral">✨ {userProfile.xp} XP</div>
           </div>
           {userProfile.streak > 0 && (
             <div className="px-3 py-2 rounded-2xl bg-coral/10">
@@ -461,9 +637,39 @@ export default function TheraCoach() {
               }`}
             >
               {message.role === 'assistant' && (
-                <div className="flex items-center gap-2 mb-3 pb-2 border-b border-coral/20">
-                  <span className={`text-2xl ${ageGroup === 'toddler' ? 'animate-bounce-soft' : ''}`}>🗣️</span>
-                  <span className="font-bold text-sm text-gradient">Thera Coach</span>
+                <div className="flex items-center justify-between gap-2 mb-3 pb-2 border-b border-coral/20">
+                  <div className="flex items-center gap-2">
+                    <span className={`text-2xl ${ageGroup === 'toddler' ? 'animate-bounce-soft' : ''}`}>🗣️</span>
+                    <span className="font-bold text-sm text-gradient">Thera Coach</span>
+                  </div>
+                  {/* Speaker button for this message */}
+                  {ttsSupported && message.content && (
+                    <motion.button
+                      whileHover={{ scale: 1.1 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => {
+                        if (currentSpeakingId === message.id) {
+                          stopSpeaking();
+                        } else {
+                          speakText(message.content, message.id);
+                        }
+                      }}
+                      className={`p-1.5 rounded-lg transition-all ${
+                        currentSpeakingId === message.id
+                          ? 'bg-coral/20 text-coral animate-pulse'
+                          : 'bg-teal/10 text-teal hover:bg-teal/20'
+                      }`}
+                      title={currentSpeakingId === message.id ? 'Stop speaking' : 'Play message'}
+                    >
+                      {currentSpeakingId === message.id ? (
+                        <svg width={16} height={16} viewBox="0 0 24 24" fill="currentColor">
+                          <rect x="6" y="6" width="12" height="12" rx="2" />
+                        </svg>
+                      ) : (
+                        <SpeakerIcon isMuted={false} size={16} />
+                      )}
+                    </motion.button>
+                  )}
                 </div>
               )}
               <div className={`whitespace-pre-wrap leading-relaxed ${
@@ -680,28 +886,65 @@ export default function TheraCoach() {
           )}
 
           {/* Listening indicator */}
-          {isListening && (
-            <div className="flex flex-col items-center gap-2">
-              <div className="flex items-center justify-center gap-3 text-coral text-lg font-bold">
-                <div className="flex gap-1 items-end">
-                  {[...Array(5)].map((_, i) => (
-                    <div
+          <AnimatePresence>
+            {isListening && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="flex flex-col items-center gap-2"
+              >
+                <div className="flex items-center justify-center gap-3 text-coral text-lg font-bold">
+                  <div className="flex gap-1 items-end h-6">
+                    {[...Array(5)].map((_, i) => (
+                      <motion.div
+                        key={i}
+                        className="w-1.5 bg-coral rounded-full"
+                        animate={{ height: ['12px', '24px', '12px'] }}
+                        transition={{ duration: 0.5, repeat: Infinity, delay: i * 0.1 }}
+                      />
+                    ))}
+                  </div>
+                  <span>{ageGroup === 'toddler' ? "I'm listening! 👂" : "Listening..."}</span>
+                </div>
+                <span className="text-xs text-navy-light">
+                  {ageGroup === 'toddler' ? "I'll send when you stop talking! ✨" : "Auto-sends after you pause speaking"}
+                </span>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Speaking indicator */}
+          <AnimatePresence>
+            {isSpeaking && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="flex items-center justify-center gap-3 text-teal text-sm font-medium"
+              >
+                <div className="flex gap-1 items-center">
+                  {[1, 2, 3].map((i) => (
+                    <motion.div
                       key={i}
-                      className="w-2 bg-coral rounded-full"
-                      style={{
-                        height: `${12 + Math.random() * 16}px`,
-                        animation: `wave 0.5s ease-in-out ${i * 0.1}s infinite`,
-                      }}
+                      className="w-2 h-2 bg-teal rounded-full"
+                      animate={{ scale: [1, 1.5, 1] }}
+                      transition={{ duration: 0.6, repeat: Infinity, delay: i * 0.15 }}
                     />
                   ))}
                 </div>
-                <span>{ageGroup === 'toddler' ? "I'm listening! 👂" : "Listening..."}</span>
-              </div>
-              <span className="text-xs text-navy-light">
-                {ageGroup === 'toddler' ? "I'll send when you stop talking! ✨" : "Auto-sends after you pause speaking"}
-              </span>
-            </div>
-          )}
+                <span>Speaking...</span>
+                <motion.button
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={stopSpeaking}
+                  className="px-3 py-1 bg-teal/10 rounded-full text-xs hover:bg-teal/20 font-semibold"
+                >
+                  Stop
+                </motion.button>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Error message */}
           {micError && (
